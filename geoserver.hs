@@ -30,8 +30,15 @@ foldRegion alg (Union r1 r2) = ra_union alg (foldRegion alg r1) (foldRegion alg 
 
 
 -- inRegion interpretation
-inRegion :: Region -> (Point -> Bool)
-inRegion = undefined
+inRegionAlgebra :: RegionAlgebra (Point -> Bool)
+inRegionAlgebra = RAlg {
+  ra_sphere = \r (x, y, z) -> x^2 + y^2 + z^2 <= r^2,
+  ra_cube = \s (x, y, z) -> abs x <= s/2 && abs y <= s/2 && abs z <= s/2,
+  ra_translate = \r (x0, y0, z0) (x, y , z) -> r (x - x0, y - y0, z - z0),
+  ra_outside = \r p -> not (r p),
+  ra_intersection = \r1 r2 p -> r1 p && r2 p,
+  ra_union = \r1 r2 p -> r1 p || r2 p
+}
 
 -- serialize interpretation
 serialize :: Region -> String
