@@ -82,6 +82,13 @@ drawSquare size = do
     vertex $ Vertex3 (-(size/2)) (size/2) (0 :: GLfloat)
 
 
+drawTranslate :: DisplayCallback -> Point -> DisplayCallback
+drawTranslate cb (x, y, z) = do
+  preservingMatrix $ do
+    translate $ Vector3 x y z
+    cb
+
+
 drawUnion :: DisplayCallback -> DisplayCallback -> DisplayCallback
 drawUnion dc1 dc2 = do
     dc1 
@@ -100,5 +107,6 @@ display = do
 displayAlgebra :: RegionAlgebra DisplayCallback
 displayAlgebra = RAlg {
   ra_cube = drawSquare,
+  ra_translate = drawTranslate,
   ra_union = drawUnion
 }
