@@ -81,6 +81,12 @@ drawSquare size = do
     vertex $ Vertex3 (-(size/2)) (-(size/2)) (0 :: GLfloat)
     vertex $ Vertex3 (-(size/2)) (size/2) (0 :: GLfloat)
 
+
+drawUnion :: DisplayCallback -> DisplayCallback -> DisplayCallback
+drawUnion dc1 dc2 = do
+    dc1 
+    dc2
+
 display :: DisplayCallback
 display = do
   clear [ ColorBuffer ]
@@ -93,5 +99,6 @@ display = do
 
 displayAlgebra :: RegionAlgebra DisplayCallback
 displayAlgebra = RAlg {
-  ra_cube = drawSquare
+  ra_cube = drawSquare,
+  ra_union = drawUnion
 }
