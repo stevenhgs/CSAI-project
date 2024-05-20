@@ -3,7 +3,6 @@ module GeoServer where
 import Graphics.UI.GLUT
 import Region
 import RenderRegion
-import Data.Char (GeneralCategory(NotAssigned))
 
 
 foldRegion :: RegionAlgebra a -> Region -> a
