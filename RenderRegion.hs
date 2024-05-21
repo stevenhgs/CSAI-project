@@ -65,9 +65,6 @@ drawUnion dc1 dc2 = do
 
 display :: DisplayCallback
 display = do
-  clear [ ColorBuffer ]
-  renderPrimitive Points $ do
-    color $ Color3 1 1 (1 :: GLfloat)
-    vertex $ Vertex3 (-0.5) 0 (0 :: GLfloat)
-  drawCube (0.5 :: GLdouble)
+  clear [ ColorBuffer, StencilBuffer ]
+  drawIntersection (drawTranslate (drawCube 0.2) (0.1, 0, 0)) (drawCube 0.2)
   flush
