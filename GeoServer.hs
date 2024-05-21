@@ -3,6 +3,7 @@ module GeoServer where
 import Graphics.UI.GLUT
 import Region
 import RenderRegion
+import PreMadeRegions
 
 
 foldRegion :: RegionAlgebra a -> Region -> a
@@ -34,8 +35,15 @@ renderAlgebra = RAlg {
 }
 
 -- serialize interpretation
-serialize :: Region -> String
-serialize = undefined
+serializeAlgebra :: RegionAlgebra String
+serializeAlgebra = RAlg {
+  ra_sphere = \r -> "SphereGS " ++ show r,
+  ra_cube = \s -> "CubeGS " ++ show s,
+  ra_translate = \r p -> "TranslateGS (" ++ r ++ ") " ++ show p,
+  ra_outside = \r -> "OutsideGS (" ++ r ++ ")",
+  ra_intersection = \r1 r2 -> "IntersectionGS (" ++ r1 ++ ") (" ++ r2 ++ ")",
+  ra_union = \r1 r2 -> "UnionGS (" ++ r1 ++ ") (" ++ r2 ++ ")"
+}
 
 
 -- display logic
