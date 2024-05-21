@@ -52,19 +52,31 @@ drawIntersection dc1 dc2 = do
   stencilFunc $= (Always, 1, 0xFF)
   stencilMask $= 0xFF
   dc1
+  stencilTest $= Enabled
   colorMask $= Color4 Enabled Enabled Enabled Enabled
   stencilFunc $= (Equal, 1, 0xFF)
   stencilMask $= 0x00
   dc2
   stencilTest $= Disabled
 
+
 drawUnion :: DisplayCallback -> DisplayCallback -> DisplayCallback
 drawUnion dc1 dc2 = do
     dc1 
     dc2
 
+-- FOR TESTING
 display :: DisplayCallback
 display = do
-  clear [ ColorBuffer, StencilBuffer ]
+  clear [ ColorBuffer, DepthBuffer, StencilBuffer]
   drawIntersection (drawTranslate (drawCube 0.2) (0.1, 0, 0)) (drawCube 0.2)
   flush
+
+main :: IO()
+main = do
+  (_progName, _args) <- getArgsAndInitialize
+  initialDisplayMode $= [RGBAMode, WithStencilBuffer]
+  _window <- createWindow "GeoServer"
+  clearColor $= Color4 0.0 0.0 0.0 1.0
+  displayCallback $= display
+  mainLoop
