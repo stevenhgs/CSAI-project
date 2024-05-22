@@ -27,29 +27,84 @@ drawTranslate cb (x, y, z) = do
 
 drawOutside :: DisplayCallback -> DisplayCallback
 drawOutside dc = do
-  stencilTest $= Enabled
-  colorMask $= Color4 Disabled Disabled Disabled Disabled
-  stencilOp $= (OpReplace, OpReplace, OpReplace)
-  stencilFunc $= (Always, 1, 0xFF)
-  stencilMask $= 0xFF
+  prevColorMask <- get colorMask
+  (Position x y, Size width height) <- get viewport
+  -- Check if prevColorMask is Disabled
+  let isColorMaskDisabled = case prevColorMask of
+        Color4 Disabled Disabled Disabled Disabled -> True
+        _ -> False
+  -- Get the previous state and save it
+  prevStencilTestStatus <- get stencilTest
+  prevStencilFunc <- get stencilFunc
+  prevStencilOp <- get stencilOp
+  prevStencilBuffer <- readStencilBuffer (x, y) (width, height)
+  -- if color mask is disabled we need to get the stencil buffer
+  when (isColorMaskDisabled) $ do
+    colorMask $= Color4 Disabled Disabled Disabled Disabled
+    clear [StencilBuffer]
+    stencilOp $= (OpReplace, OpReplace, OpReplace)
+    stencilFunc $= (Always, 1, 0xFF)
+    dc
 
-  dc
+    -- the gotten stencilBuffer now has to be reversed
+    stencilFunc $= (Equal, 1, 0xFF)
+    -- parameters are fail, passes, passess
+    -- so if it is equal to 1 than it needs to be 0 -> Decr
+    -- if it is not equal to 1 make it 1 -> Incr
+    stencilOp $= (OpIncr, OpDecr, OpDecr)
+    renderPrimitive Quads $ do
+      vertex (Vertex2 (-10.0) (-10.0) :: Vertex2 GLfloat)
+      vertex (Vertex2 10.0 (-10.0) :: Vertex2 GLfloat)
+      vertex (Vertex2 10.0 10.0 :: Vertex2 GLfloat)
+      vertex (Vertex2 (-10.0) 10.0 :: Vertex2 GLfloat)
+  
+  -- if color mask is not disabled we need to draw
+  when (not isColorMaskDisabled) $ do
+    putStrLn "Drawing Outside"
+    colorMask $= Color4 Disabled Disabled Disabled Disabled
+    clear [StencilBuffer]
+    stencilOp $= (OpReplace, OpReplace, OpReplace)
+    stencilFunc $= (Always, 1, 0xFF)
+    dc
 
-  colorMask $= Color4 Enabled Enabled Enabled Enabled
-  stencilFunc $= (Notequal, 1, 0xFF)
-  stencilMask $= 0x00
-  color (Color3 1.0 0.0 0.0 :: Color3 GLfloat)
-  renderPrimitive Quads $ do
-    vertex (Vertex2 (-1.0) (-1.0) :: Vertex2 GLfloat)
-    vertex (Vertex2 1.0 (-1.0) :: Vertex2 GLfloat)
-    vertex (Vertex2 1.0 1.0 :: Vertex2 GLfloat)
-    vertex (Vertex2 (-1.0) 1.0 :: Vertex2 GLfloat)
+    -- the gotten stencilBuffer now has to be reversed
+    stencilFunc $= (Equal, 1, 0xFF)
+    -- parameters are fail, passes, passess
+    -- so if it is equal to 1 than it needs to be 0 -> Decr
+    -- if it is not equal to 1 make it 1 -> Incr
+    stencilOp $= (OpIncr, OpDecr, OpDecr)
+    renderPrimitive Quads $ do
+      vertex (Vertex2 (-10.0) (-10.0) :: Vertex2 GLfloat)
+      vertex (Vertex2 10.0 (-10.0) :: Vertex2 GLfloat)
+      vertex (Vertex2 10.0 10.0 :: Vertex2 GLfloat)
+      vertex (Vertex2 (-10.0) 10.0 :: Vertex2 GLfloat)
+    
+    -- This part is needed to both handle if the Outside is in root or in an IntersectGS
+    -- save the current StencilBuffer
+    stencilBufferFromOutside <- readStencilBuffer (x, y) (width, height)
+    -- now intersect it with the previous
+    intersectionStencilBuffer <- computeIntersection (width, height) prevStencilBuffer stencilBufferFromOutside
+    -- and now set it as the current StencilBuffer
+    clear [StencilBuffer]
+    writeStencilBuffer (x, y) (width, height) intersectionStencilBuffer
+    -- Now draw everywhere based on this
+    colorMask $= Color4 Enabled Enabled Enabled Enabled
+    stencilFunc $= (Equal, 1, 0xFF)
+    stencilOp $= (OpKeep, OpKeep, OpKeep)
+    renderPrimitive Quads $ do
+      vertex (Vertex2 (-10.0) (-10.0) :: Vertex2 GLfloat)
+      vertex (Vertex2 10.0 (-10.0) :: Vertex2 GLfloat)
+      vertex (Vertex2 10.0 10.0 :: Vertex2 GLfloat)
+      vertex (Vertex2 (-10.0) 10.0 :: Vertex2 GLfloat)
+    
+    -- restore previous StencilBuffer
+    writeStencilBuffer (x, y) (width, height) prevStencilBuffer
 
-  -- Disable stencil testing
-  stencilTest $= Disabled
-
-
-
+  -- Restore the stencil test state
+  colorMask $= prevColorMask
+  stencilTest $= prevStencilTestStatus
+  stencilFunc $= prevStencilFunc
+  stencilOp $= prevStencilOp
 
 
 -- Helper function to read the stencil buffer

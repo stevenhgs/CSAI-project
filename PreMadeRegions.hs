@@ -25,3 +25,13 @@ unionOfIntersections = UnionGS intersection1 intersection2
 
 intersectionOfCubeANdIntersection = IntersectionGS translatedCube1 intersection1
 intersectionOfCubeANdUnionOfIntersections = IntersectionGS translatedCube1 unionOfIntersections
+
+
+outsideCube = OutsideGS cube1
+translatedOutsideCube = TranslateGS outsideCube (0, 0.25, 0)
+outsideTranslatedOutsideCube = OutsideGS translatedOutsideCube
+
+-- for this one outside is only used to get StencilBuffer
+intersectionOutsideAndUnion = IntersectionGS translatedOutsideCube union2
+-- for this one outside is used to get StencilBuffer and to draw
+intersectionUnionAndOutside = IntersectionGS union2 translatedOutsideCube

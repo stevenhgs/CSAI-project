@@ -31,6 +31,7 @@ renderAlgebra = RAlg {
   ra_sphere = drawSphere,
   ra_cube = drawCube,
   ra_translate = drawTranslate,
+  ra_outside = drawOutside,
   ra_union = drawUnion,
   ra_intersection = drawIntersection
 }
@@ -67,10 +68,10 @@ drawing region = do
     stencilOp $= (OpReplace, OpReplace, OpReplace)
     renderPrimitive Quads $ do
       color (Color3 1.0 0.0 0.0 :: Color3 GLfloat)
-      vertex (Vertex2 (-1.0) (-1.0) :: Vertex2 GLfloat)
-      vertex (Vertex2 1.0 (-1.0) :: Vertex2 GLfloat)
-      vertex (Vertex2 1.0 1.0 :: Vertex2 GLfloat)
-      vertex (Vertex2 (-1.0) 1.0 :: Vertex2 GLfloat)
+      vertex (Vertex2 (-10.0) (-10.0) :: Vertex2 GLfloat)
+      vertex (Vertex2 10.0 (-10.0) :: Vertex2 GLfloat)
+      vertex (Vertex2 10.0 10.0 :: Vertex2 GLfloat)
+      vertex (Vertex2 (-10.0) 10.0 :: Vertex2 GLfloat)
     colorMask $= Color4 Enabled Enabled Enabled Enabled
     stencilTest $= Enabled
     -- until here
