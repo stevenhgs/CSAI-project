@@ -31,7 +31,8 @@ renderAlgebra = RAlg {
   ra_sphere = drawSphere,
   ra_cube = drawCube,
   ra_translate = drawTranslate,
-  ra_union = drawUnion
+  ra_union = drawUnion,
+  ra_intersection = drawIntersection
 }
 
 -- serialize interpretation
@@ -57,5 +58,22 @@ displayRegion region = do
 drawing :: Region -> DisplayCallback
 drawing region = do
     clear [ ColorBuffer, DepthBuffer, StencilBuffer]
+
+    -- This is needed for intersections
+    stencilTest $= Enabled
+    clear [StencilBuffer]
+    colorMask $= Color4 Disabled Disabled Disabled Disabled
+    stencilFunc $= (Always, 1, 0xFF)
+    stencilOp $= (OpReplace, OpReplace, OpReplace)
+    renderPrimitive Quads $ do
+      color (Color3 1.0 0.0 0.0 :: Color3 GLfloat)
+      vertex (Vertex2 (-1.0) (-1.0) :: Vertex2 GLfloat)
+      vertex (Vertex2 1.0 (-1.0) :: Vertex2 GLfloat)
+      vertex (Vertex2 1.0 1.0 :: Vertex2 GLfloat)
+      vertex (Vertex2 (-1.0) 1.0 :: Vertex2 GLfloat)
+    colorMask $= Color4 Enabled Enabled Enabled Enabled
+    stencilTest $= Enabled
+    -- until here
+
     foldRegion renderAlgebra region
     flush
