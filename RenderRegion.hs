@@ -2,111 +2,105 @@ module RenderRegion where
 import Graphics.Rendering.OpenGL
 import Graphics.UI.GLUT
 import Region
-
+import Control.Monad.State
 import Data.Array.Storable
+import Data.IORef
 import Foreign (Ptr, nullPtr)
 import Foreign.C.Types (CUInt)
-import Control.Monad (forM_, when)
+import Control.Monad (forM_, when, unless)
 
 
-drawSphere :: GLdouble -> DisplayCallback
-drawSphere radius = do
-  color $ Color3 1 0 (0 :: GLfloat)
-  renderObject Solid (Sphere' radius 40 40)
+data DrawState = DrawState {
+  fillColor :: Color3 GLdouble,
+  outlineColor :: Color3 GLdouble
+} deriving (Show)
 
-drawCube :: GLdouble -> DisplayCallback
-drawCube side = do
-  color $ Color3 1 0 (0 :: GLfloat)
-  renderObject Solid (Cube side)
+type Draw a = StateT DrawState IO a
 
-drawTranslate :: DisplayCallback -> PointGS -> DisplayCallback
-drawTranslate cb (x, y, z) = do
-  preservingMatrix $ do
+drawWithOutline :: DisplayCallback -> Draw()
+drawWithOutline renderObject = do
+  state <- Control.Monad.State.get
+  liftIO $ do 
+    color $ fillColor state
+    renderObject
+
+  liftIO $ do
+    -- Set the polygon mode to line to draw the outline
+    polygonMode $= (Line, Line)
+    color $ outlineColor state 
+    renderObject
+    -- Reset the polygon mode to fill
+    polygonMode $= (Fill, Fill)
+
+scaleColor3 :: GLdouble -> Color3 GLdouble -> Color3 GLdouble
+scaleColor3 factor (Color3 r g b) = 
+    Color3 (clamp(r*factor)) (clamp(g*factor)) (clamp(b*factor))
+  where
+    clamp x = max 0 (min 1 x)
+  
+drawCone :: GLdouble -> GLdouble -> Draw()
+drawCone base height = drawWithOutline $ renderObject Solid (Cone base height 40 40)
+
+drawSphere :: GLdouble -> Draw()
+drawSphere radius =  drawWithOutline $ renderObject Solid (Sphere' radius 40 40)
+
+drawCube :: GLdouble -> Draw()
+drawCube side = drawWithOutline $ renderObject Solid (Cube side)
+
+runDraw :: DrawState -> Draw a -> IO a
+runDraw initialState drawAction = evalStateT drawAction initialState
+
+drawTranslate :: Draw() -> PointGS -> Draw()
+drawTranslate drawAction (x, y, z) = do
+  currentState <- Control.Monad.State.get
+  liftIO $ preservingMatrix $ do
     translate $ Vector3 x y z
-    cb
+    evalStateT drawAction currentState
 
-drawOutside :: DisplayCallback -> DisplayCallback
-drawOutside dc = do
-  prevColorMask <- get colorMask
-  (Position x y, Size width height) <- get viewport
+drawRotate :: Draw() -> PointGS -> Draw()
+drawRotate drawAction (angleX, angleY, angleZ) = do
+  currentState <- Control.Monad.State.get
+  liftIO $ preservingMatrix $ do
+    rotate angleX $ Vector3 1 0 0
+    rotate angleY $ Vector3 0 1 0
+    rotate angleZ $ Vector3 0 0 1
+    evalStateT drawAction currentState
+
+drawOutside :: Draw() -> Draw()
+drawOutside drawAction = do
+  prevColorMask <- liftIO $  Graphics.UI.GLUT.get colorMask
+  (Position x y, Size width height) <- liftIO $  Graphics.UI.GLUT.get viewport
   -- Check if prevColorMask is Disabled
   let isColorMaskDisabled = case prevColorMask of
         Color4 Disabled Disabled Disabled Disabled -> True
         _ -> False
   -- Get the previous state and save it
-  prevStencilTestStatus <- get stencilTest
-  prevStencilFunc <- get stencilFunc
-  prevStencilOp <- get stencilOp
-  prevStencilBuffer <- readStencilBuffer (x, y) (width, height)
+  prevStencilTestStatus <- liftIO $ Graphics.UI.GLUT.get stencilTest
+  prevStencilFunc <- liftIO $ Graphics.UI.GLUT.get stencilFunc
+  prevStencilOp <- liftIO $ Graphics.UI.GLUT.get stencilOp
+  prevStencilBuffer <- liftIO $ readStencilBuffer (x, y) (width, height)
   -- if color mask is disabled we need to get the stencil buffer
-  when (isColorMaskDisabled) $ do
+  when isColorMaskDisabled $ do
     colorMask $= Color4 Disabled Disabled Disabled Disabled
-    clear [StencilBuffer]
-    stencilOp $= (OpReplace, OpReplace, OpReplace)
-    stencilFunc $= (Always, 1, 0xFF)
-    dc
+    liftIO $ clear [StencilBuffer]
+    liftIO $ do
+      stencilOp $= (OpReplace, OpReplace, OpReplace)
+      stencilFunc $= (Always, 1, 0xFF)
+    drawAction
 
     -- the gotten stencilBuffer now has to be reversed
-    stencilFunc $= (Equal, 1, 0xFF)
-    -- parameters are fail, passes, passess
-    -- so if it is equal to 1 than it needs to be 0 -> Decr
-    -- if it is not equal to 1 make it 1 -> Incr
-    stencilOp $= (OpIncr, OpDecr, OpDecr)
-    renderPrimitive Quads $ do
-      vertex (Vertex2 (-10.0) (-10.0) :: Vertex2 GLfloat)
-      vertex (Vertex2 10.0 (-10.0) :: Vertex2 GLfloat)
-      vertex (Vertex2 10.0 10.0 :: Vertex2 GLfloat)
-      vertex (Vertex2 (-10.0) 10.0 :: Vertex2 GLfloat)
+    liftIO $ do
+      stencilFunc $= (Equal, 1, 0xFF)
+      -- parameters are fail, passes, passess
+      -- so if it is equal to 1 than it needs to be 0 -> Decr
+      -- if it is not equal to 1 make it 1 -> Incr
+      stencilOp $= (OpIncr, OpDecr, OpDecr)
+      renderPrimitive Quads $ do
+        vertex (Vertex2 (-10.0) (-10.0) :: Vertex2 GLfloat)
+        vertex (Vertex2 10.0 (-10.0) :: Vertex2 GLfloat)
+        vertex (Vertex2 10.0 10.0 :: Vertex2 GLfloat)
+        vertex (Vertex2 (-10.0) 10.0 :: Vertex2 GLfloat)
   
-  -- if color mask is not disabled we need to draw
-  when (not isColorMaskDisabled) $ do
-    putStrLn "Drawing Outside"
-    colorMask $= Color4 Disabled Disabled Disabled Disabled
-    clear [StencilBuffer]
-    stencilOp $= (OpReplace, OpReplace, OpReplace)
-    stencilFunc $= (Always, 1, 0xFF)
-    dc
-
-    -- the gotten stencilBuffer now has to be reversed
-    stencilFunc $= (Equal, 1, 0xFF)
-    -- parameters are fail, passes, passess
-    -- so if it is equal to 1 than it needs to be 0 -> Decr
-    -- if it is not equal to 1 make it 1 -> Incr
-    stencilOp $= (OpIncr, OpDecr, OpDecr)
-    renderPrimitive Quads $ do
-      vertex (Vertex2 (-10.0) (-10.0) :: Vertex2 GLfloat)
-      vertex (Vertex2 10.0 (-10.0) :: Vertex2 GLfloat)
-      vertex (Vertex2 10.0 10.0 :: Vertex2 GLfloat)
-      vertex (Vertex2 (-10.0) 10.0 :: Vertex2 GLfloat)
-    
-    -- This part is needed to both handle if the Outside is in root or in an IntersectGS
-    -- save the current StencilBuffer
-    stencilBufferFromOutside <- readStencilBuffer (x, y) (width, height)
-    -- now intersect it with the previous
-    intersectionStencilBuffer <- computeIntersection (width, height) prevStencilBuffer stencilBufferFromOutside
-    -- and now set it as the current StencilBuffer
-    clear [StencilBuffer]
-    writeStencilBuffer (x, y) (width, height) intersectionStencilBuffer
-    -- Now draw everywhere based on this
-    colorMask $= Color4 Enabled Enabled Enabled Enabled
-    stencilFunc $= (Equal, 1, 0xFF)
-    stencilOp $= (OpKeep, OpKeep, OpKeep)
-    renderPrimitive Quads $ do
-      vertex (Vertex2 (-10.0) (-10.0) :: Vertex2 GLfloat)
-      vertex (Vertex2 10.0 (-10.0) :: Vertex2 GLfloat)
-      vertex (Vertex2 10.0 10.0 :: Vertex2 GLfloat)
-      vertex (Vertex2 (-10.0) 10.0 :: Vertex2 GLfloat)
-    
-    -- restore previous StencilBuffer
-    writeStencilBuffer (x, y) (width, height) prevStencilBuffer
-
-  -- Restore the stencil test state
-  colorMask $= prevColorMask
-  stencilTest $= prevStencilTestStatus
-  stencilFunc $= prevStencilFunc
-  stencilOp $= prevStencilOp
-
-
 -- Helper function to read the stencil buffer
 readStencilBuffer :: (GLint, GLint) -> (GLsizei, GLsizei) -> IO (StorableArray (GLint, GLint) CUInt)
 readStencilBuffer (x, y) (width, height) = do
@@ -145,18 +139,17 @@ computeUnion (width, height) buf1 buf2 = do
       writeArray intersectionBuffer (i, j) interVal
   return intersectionBuffer
 
-
 -- Main function to draw the intersection
-drawIntersection :: DisplayCallback -> DisplayCallback -> DisplayCallback
-drawIntersection dc1 dc2 = do
-  (Position x y, Size width height) <- get viewport
+drawIntersection :: Draw() -> Draw() -> Draw()
+drawIntersection drawAction1 drawAction2 = do
+  (Position x y, Size width height) <- liftIO $ Graphics.UI.GLUT.get viewport
 
   -- Get the previous state and save it
-  prevStencilTestStatus <- get stencilTest
-  prevColorMask <- get colorMask
-  prevStencilFunc <- get stencilFunc
-  prevStencilOp <- get stencilOp
-  prevStencilBuffer <- readStencilBuffer (x, y) (width, height)
+  prevStencilTestStatus <- liftIO $ Graphics.UI.GLUT.get stencilTest
+  prevColorMask <- liftIO $ Graphics.UI.GLUT.get colorMask
+  prevStencilFunc <- liftIO $ Graphics.UI.GLUT.get stencilFunc
+  prevStencilOp <- liftIO $ Graphics.UI.GLUT.get stencilOp
+  prevStencilBuffer <- liftIO $ readStencilBuffer (x, y) (width, height)
 
   -- Check if prevColorMask is Disabled
   let isColorMaskDisabled = case prevColorMask of
@@ -167,105 +160,134 @@ drawIntersection dc1 dc2 = do
   colorMask $= Color4 Disabled Disabled Disabled Disabled
 
   -- Get first mask
-  clear [StencilBuffer]
-  stencilFunc $= (Always, 1, 0xFF)
-  stencilOp $= (OpReplace, OpReplace, OpReplace)
-  dc1
-  stencilBuffer1 <- readStencilBuffer (x, y) (width, height)
+  liftIO $ clear [StencilBuffer]
+  liftIO $ do
+    stencilFunc $= (Always, 1, 0xFF)
+    stencilOp $= (OpReplace, OpReplace, OpReplace)
+  drawAction1
+  stencilBuffer1 <- liftIO $ readStencilBuffer (x, y) (width, height)
 
   -- Get second mask
-  clear [StencilBuffer]
-  stencilFunc $= (Always, 1, 0xFF)
-  stencilOp $= (OpReplace, OpReplace, OpReplace)
-  dc2
-  stencilBuffer2 <- readStencilBuffer (x, y) (width, height)
+  liftIO $ clear [StencilBuffer]
+  liftIO $ do
+    stencilFunc $= (Always, 1, 0xFF)
+    stencilOp $= (OpReplace, OpReplace, OpReplace)
+  drawAction2
+  stencilBuffer2 <- liftIO $ readStencilBuffer (x, y) (width, height)
 
   -- Compute the intersection of the two stencil buffers
-  intersectionStencilBuffer <- computeIntersection (width, height) stencilBuffer1 stencilBuffer2
-  fullIntersectionForDrawingStencilBuffer <- computeIntersection (width, height) prevStencilBuffer intersectionStencilBuffer
+  intersectionStencilBuffer <- liftIO $ computeIntersection (width, height) stencilBuffer1 stencilBuffer2
+  fullIntersectionForDrawingStencilBuffer <- liftIO $ computeIntersection (width, height) prevStencilBuffer intersectionStencilBuffer
 
-  clear [StencilBuffer]
-  writeStencilBuffer (x, y) (width, height) intersectionStencilBuffer
+  liftIO $ do
+    clear [StencilBuffer]
+    writeStencilBuffer (x, y) (width, height) intersectionStencilBuffer
   -- Restore the color mask
   colorMask $= prevColorMask
 
   -- Now you know something really has to be drawn
-  when (not isColorMaskDisabled) $ do
+  unless isColorMaskDisabled $ do
     -- Restore the intersection result to the stencil buffer
-    clear [StencilBuffer]
-    writeStencilBuffer (x, y) (width, height) fullIntersectionForDrawingStencilBuffer
+    liftIO $ do
+      clear [StencilBuffer]
+      writeStencilBuffer (x, y) (width, height) fullIntersectionForDrawingStencilBuffer
     -- Final rendering based on the intersection result
-    stencilFunc $= (Equal, 1, 0xFF)
-    stencilOp $= (OpKeep, OpKeep, OpKeep)
+      stencilFunc $= (Equal, 1, 0xFF)
+      stencilOp $= (OpKeep, OpKeep, OpKeep)
     -- Draw your final scene based on the intersection result
-    putStrLn "Drawing"
-    dc2
+      putStrLn "Drawing"
+    drawAction2
 
     -- fill StencilBuffer with all ones
-    clear [StencilBuffer]
-    writeStencilBuffer (x, y) (width, height) prevStencilBuffer
+    liftIO $ do
+      clear [StencilBuffer]
+      writeStencilBuffer (x, y) (width, height) prevStencilBuffer
     colorMask $= prevColorMask
 
   -- Restore the stencil test state
-  stencilTest $= prevStencilTestStatus
-  stencilFunc $= prevStencilFunc
-  stencilOp $= prevStencilOp
-  
-  
+  liftIO $ do
+    stencilTest $= prevStencilTestStatus
+    stencilFunc $= prevStencilFunc
+    stencilOp $= prevStencilOp
 
-
-drawUnion :: DisplayCallback -> DisplayCallback -> DisplayCallback
-drawUnion dc1 dc2 = do
-    prevColorMask <- get colorMask
+drawUnion :: Draw() -> Draw() -> Draw()
+drawUnion drawAction1 drawAction2 = do
+    prevColorMask <- liftIO $ Graphics.UI.GLUT.get colorMask
     -- Check if prevColorMask is Disabled
     let isColorMaskDisabled = case prevColorMask of
           Color4 Disabled Disabled Disabled Disabled -> True
           _ -> False
     -- if color mask is disabled we need to get the stencil buffer
-    when (isColorMaskDisabled) $ do
-      (Position x y, Size width height) <- get viewport
+    when isColorMaskDisabled $ do
+      (Position x y, Size width height) <- liftIO $ Graphics.UI.GLUT.get viewport
       -- Get the previous state and save it
-      prevStencilTestStatus <- get stencilTest
-      prevStencilFunc <- get stencilFunc
-      prevStencilOp <- get stencilOp
-      prevStencilBuffer <- readStencilBuffer (x, y) (width, height)
+      prevStencilTestStatus <- liftIO $ Graphics.UI.GLUT.get stencilTest
+      prevStencilFunc <- liftIO $ Graphics.UI.GLUT.get stencilFunc
+      prevStencilOp <- liftIO $ Graphics.UI.GLUT.get stencilOp
+      prevStencilBuffer <- liftIO $ readStencilBuffer (x, y) (width, height)
       -- set 
       stencilTest $= Enabled
       colorMask $= Color4 Disabled Disabled Disabled Disabled
       -- Get first mask
-      clear [StencilBuffer]
-      stencilFunc $= (Always, 1, 0xFF)
-      stencilOp $= (OpReplace, OpReplace, OpReplace)
-      dc1
-      stencilBuffer1 <- readStencilBuffer (x, y) (width, height)
+      liftIO $ clear [StencilBuffer]
+      liftIO $ do
+        stencilFunc $= (Always, 1, 0xFF)
+        stencilOp $= (OpReplace, OpReplace, OpReplace)
+      drawAction1
+      stencilBuffer1 <- liftIO $ readStencilBuffer (x, y) (width, height)
       -- Get second mask
-      clear [StencilBuffer]
-      stencilFunc $= (Always, 1, 0xFF)
-      stencilOp $= (OpReplace, OpReplace, OpReplace)
-      dc2
-      stencilBuffer2 <- readStencilBuffer (x, y) (width, height)
+      liftIO $ clear [StencilBuffer]
+      liftIO $ do
+        stencilFunc $= (Always, 1, 0xFF)
+        stencilOp $= (OpReplace, OpReplace, OpReplace)
+      drawAction2
+      stencilBuffer2 <- liftIO $ readStencilBuffer (x, y) (width, height)
       -- Compute the union of the two stencil buffers
-      unionStencilBuffer <- computeUnion (width, height) stencilBuffer1 stencilBuffer2
+      unionStencilBuffer <- liftIO $ computeUnion (width, height) stencilBuffer1 stencilBuffer2
       -- write the unionStencilBuffer to the StencilBuffer
-      clear [StencilBuffer]
-      writeStencilBuffer (x, y) (width, height) unionStencilBuffer
+      liftIO $ do
+        clear [StencilBuffer]
+        writeStencilBuffer (x, y) (width, height) unionStencilBuffer
       -- Restore the stencil test state
-      colorMask $= prevColorMask
-      stencilTest $= prevStencilTestStatus
-      stencilFunc $= prevStencilFunc
-      stencilOp $= prevStencilOp
+      liftIO $ do 
+        colorMask $= prevColorMask
+        stencilTest $= prevStencilTestStatus
+        stencilFunc $= prevStencilFunc
+        stencilOp $= prevStencilOp
     
     -- if color mask is not disabled we need to draw
-    when (not isColorMaskDisabled) $ do
-      dc1
-      dc2
+    unless isColorMaskDisabled $ do
+      drawAction1
+      drawAction2
+
 
 -- FOR TESTING
 display :: DisplayCallback
 display = do
   clear [ ColorBuffer, DepthBuffer, StencilBuffer]
-  drawIntersection (drawTranslate (drawCube 0.2) (0.1, 0, 0)) (drawCube 0.2)
+  stencilTest $= Enabled
+  clear [StencilBuffer]
+  colorMask $= Color4 Disabled Disabled Disabled Disabled
+  stencilFunc $= (Always, 1, 0xFF)
+  stencilOp $= (OpReplace, OpReplace, OpReplace)
+  renderPrimitive Quads $ do
+    color (Color3 1.0 0.0 0.0 :: Color3 GLfloat)
+    vertex (Vertex2 (-1.0) (-1.0) :: Vertex2 GLfloat)
+    vertex (Vertex2 1.0 (-1.0) :: Vertex2 GLfloat)
+    vertex (Vertex2 1.0 1.0 :: Vertex2 GLfloat)
+    vertex (Vertex2 (-1.0) 1.0 :: Vertex2 GLfloat)
+  colorMask $= Color4 Enabled Enabled Enabled Enabled
+  runDraw (DrawState (Color3 0 1 0) (Color3 0 0.8 0)) (drawUnion (drawRotate (drawCube 0.5) (45, 45, 0)) (drawTranslate (drawSphere 0.2) (-0.5, 0, 0)))
+  stencilTest $= Enabled
   flush
+
+reshape :: ReshapeCallback
+reshape size = do 
+  viewport $= (Position 0 0, size)
+
+keyboardMouse :: KeyboardMouseCallback
+keyboardMouse _key _state _modifiers _position = return ()
+
 
 main :: IO()
 main = do
