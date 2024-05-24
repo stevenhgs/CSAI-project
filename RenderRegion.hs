@@ -179,45 +179,47 @@ drawIntersection drawAction1 drawAction2 = do
   drawAction1
   stencilBuffer1 <- liftIO $ readStencilBuffer (x, y) (width, height)
 
-  -- Get second mask
-  liftIO $ clear [StencilBuffer]
-  liftIO $ do
-    stencilFunc $= (Always, 1, 0xFF)
-    stencilOp $= (OpReplace, OpReplace, OpReplace)
-  drawAction2
-  stencilBuffer2 <- liftIO $ readStencilBuffer (x, y) (width, height)
+  -- if color mask is disabled we need to get the stencil buffer
+  when isColorMaskDisabled $ do
+    -- Get second mask
+    liftIO $ clear [StencilBuffer]
+    liftIO $ do
+      stencilFunc $= (Always, 1, 0xFF)
+      stencilOp $= (OpReplace, OpReplace, OpReplace)
+    drawAction2
+    stencilBuffer2 <- liftIO $ readStencilBuffer (x, y) (width, height)
 
-  -- Compute the intersection of the two stencil buffers
-  intersectionStencilBuffer <- liftIO $ computeIntersection (width, height) stencilBuffer1 stencilBuffer2
-  fullIntersectionForDrawingStencilBuffer <- liftIO $ computeIntersection (width, height) prevStencilBuffer intersectionStencilBuffer
-
-  liftIO $ do
-    clear [StencilBuffer]
-    writeStencilBuffer (x, y) (width, height) intersectionStencilBuffer
-  -- Restore the color mask
-  colorMask $= prevColorMask
+    -- Compute the intersection of the two stencil buffers
+    intersectionStencilBuffer <- liftIO $ computeIntersection (width, height) stencilBuffer1 stencilBuffer2
+    -- the intersectionStencilBuffer will be set after exiting this function in this case
+    liftIO $ do
+      clear [StencilBuffer]
+      writeStencilBuffer (x, y) (width, height) intersectionStencilBuffer
 
   -- Now you know something really has to be drawn
   unless isColorMaskDisabled $ do
     -- Restore the intersection result to the stencil buffer
+    fullIntersectionForDrawingStencilBuffer <- liftIO $ computeIntersection (width, height) prevStencilBuffer stencilBuffer1
     liftIO $ do
+      colorMask $= prevColorMask
       clear [StencilBuffer]
       writeStencilBuffer (x, y) (width, height) fullIntersectionForDrawingStencilBuffer
-    -- Final rendering based on the intersection result
+      -- Final rendering based on the intersection result
       stencilFunc $= (Equal, 1, 0xFF)
       stencilOp $= (OpKeep, OpKeep, OpKeep)
-    -- Draw your final scene based on the intersection result
+      -- Draw your final scene based on the intersection result
       putStrLn "Drawing"
     drawAction2
 
-    -- fill StencilBuffer with all ones
+    -- fill StencilBuffer the stencil buffer before calling this function
     liftIO $ do
       clear [StencilBuffer]
       writeStencilBuffer (x, y) (width, height) prevStencilBuffer
-    colorMask $= prevColorMask
+    
 
   -- Restore the stencil test state
   liftIO $ do
+    colorMask $= prevColorMask
     stencilTest $= prevStencilTestStatus
     stencilFunc $= prevStencilFunc
     stencilOp $= prevStencilOp
