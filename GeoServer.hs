@@ -22,6 +22,25 @@ distanceFromCenterConeYAxis base height =
   let slope = height/base
     in \y -> slope * y + base
 
+degreesToRadians :: Double -> Double
+degreesToRadians degrees = degrees * (pi / 180)
+
+-- Function to inversely rotate a point (x, y, z) given angles (a, b, c)
+inverseRotatePoint :: (Double, Double, Double) -> (Double, Double, Double) -> (Double, Double, Double)
+inverseRotatePoint (a, b, c) (x, y, z) =
+    let sinA = sin (degreesToRadians (-a))
+        cosA = cos (degreesToRadians (-a))
+        sinB = sin (degreesToRadians (-b))
+        cosB = cos (degreesToRadians (-b))
+        sinC = sin (degreesToRadians (-c))
+        cosC = cos (degreesToRadians (-c))
+        -- calculate the new positions
+        newX = (x * cosB * cosC) + (y * (cosA * sinC + sinA * sinB * cosC)) + (z * (sinA * sinC - (cosA * sinB * cosC)))
+        newY = (x * (-cosB) * sinC) + (y * (cosA * cosC - (sinA * sinB * cosC))) + (z * (sinA * cosC + (cosA * sinB * sinC)))
+        newZ = (x * sinB) + (y * (-(sinA * cosB))) + (z * (cosA * cosB))
+
+    in (newX, newY, newZ)
+
 
 -- inRegion interpretation
 inRegionAlgebra :: RegionAlgebra (PointGS -> Bool)
@@ -31,7 +50,7 @@ inRegionAlgebra = RAlg {
   ra_cone = \b h (x, y, z) -> let d = distanceFromCenterConeYAxis b h y 
                                 in abs x <= d && abs x >= b && abs z <= d && abs z >= b,
   ra_translate = \r (x0, y0, z0) (x, y , z) -> r (x - x0, y - y0, z - z0),
-  ra_rotate = undefined,
+  ra_rotate = \r (a, b, c) (x, y, z) -> r (inverseRotatePoint (a, b, c) (x, y, z)),
   ra_outside = \r p -> not (r p),
   ra_intersection = \r1 r2 p -> r1 p && r2 p,
   ra_union = \r1 r2 p -> r1 p || r2 p

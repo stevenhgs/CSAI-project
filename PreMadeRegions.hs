@@ -1,6 +1,16 @@
 module PreMadeRegions where
 import Region
 
+c = CubeGS 2
+p = (0.0, 1.3, 0.0)
+rc = RotateGS c (0.0, 0.0, 45)
+p1 = (0.0, 1.3, 0.0)
+rc1 = RotateGS c (45, 0.0, 0.0)
+p2 = (1.3, 0.0, 0.0)
+rc2 = RotateGS c (0.0, 45, 0.0)
+rc3 = RotateGS c (45, 0.0, 45)
+
+
 sphere1 = SphereGS 0.6
 cube1 = CubeGS 0.5
 rotatedCube1 = RotateGS cube1 (0, 0, 45)
