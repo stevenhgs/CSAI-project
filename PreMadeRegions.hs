@@ -3,6 +3,7 @@ import Region
 
 sphere1 = SphereGS 0.6
 cube1 = CubeGS 0.5
+rotatedCube1 = RotateGS cube1 (0, 0, 45)
 translatedSphere1 = TranslateGS sphere1 (0.5, 0.5, 0.5)
 translatedCube1 = TranslateGS cube1 (0, 0.25, 0)
 outsideCube1 = OutsideGS cube1

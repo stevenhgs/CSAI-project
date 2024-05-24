@@ -7,12 +7,14 @@ import PreMadeRegions
 
 
 foldRegion :: RegionAlgebra a -> Region -> a
-foldRegion alg (SphereGS r)       = ra_sphere alg r
-foldRegion alg (CubeGS s)         = ra_cube alg s
-foldRegion alg (TranslateGS r p)  = ra_translate alg (foldRegion alg r) p
-foldRegion alg (OutsideGS r)      = ra_outside alg (foldRegion alg r)
+foldRegion alg (SphereGS r)           = ra_sphere alg r
+foldRegion alg (CubeGS s)             = ra_cube alg s
+foldRegion alg (ConeGS b h)           = ra_cone alg b h
+foldRegion alg (TranslateGS r p)      = ra_translate alg (foldRegion alg r) p
+foldRegion alg (OutsideGS r)          = ra_outside alg (foldRegion alg r)
 foldRegion alg (IntersectionGS r1 r2) = ra_intersection alg (foldRegion alg r1) (foldRegion alg r2)
-foldRegion alg (UnionGS r1 r2) = ra_union alg (foldRegion alg r1) (foldRegion alg r2)
+foldRegion alg (RotateGS r p)         = ra_rotate alg (foldRegion alg r) p
+foldRegion alg (UnionGS r1 r2)        = ra_union alg (foldRegion alg r1) (foldRegion alg r2)
 
 
 distanceFromCenterConeYAxis :: Double -> Double -> (Double -> Double)
