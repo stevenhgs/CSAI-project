@@ -43,8 +43,8 @@ renderAlgebra = RAlg {
   ra_cone = drawCone,
   ra_translate = drawTranslate,
   ra_rotate = drawRotate,
-  ra_outside = undefined,
-  ra_intersection = undefined,
+  ra_outside = drawOutside,
+  ra_intersection = drawIntersection,
   ra_union = drawUnion
 }
 

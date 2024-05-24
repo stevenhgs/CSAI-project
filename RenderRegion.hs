@@ -100,6 +100,58 @@ drawOutside drawAction = do
         vertex (Vertex2 10.0 (-10.0) :: Vertex2 GLfloat)
         vertex (Vertex2 10.0 10.0 :: Vertex2 GLfloat)
         vertex (Vertex2 (-10.0) 10.0 :: Vertex2 GLfloat)
+
+  -- if color mask is not disabled we need to draw
+  when (not isColorMaskDisabled) $ do
+    colorMask $= Color4 Disabled Disabled Disabled Disabled
+    liftIO $ clear [StencilBuffer]
+    liftIO $ do
+      stencilOp $= (OpReplace, OpReplace, OpReplace)
+      stencilFunc $= (Always, 1, 0xFF)
+    drawAction
+
+    -- the gotten stencilBuffer now has to be reversed
+    liftIO $ do
+      stencilFunc $= (Equal, 1, 0xFF)
+      -- parameters are fail, passes, passess
+      -- so if it is equal to 1 than it needs to be 0 -> Decr
+      -- if it is not equal to 1 make it 1 -> Incr
+      stencilOp $= (OpIncr, OpDecr, OpDecr)
+      renderPrimitive Quads $ do
+        vertex (Vertex2 (-10.0) (-10.0) :: Vertex2 GLfloat)
+        vertex (Vertex2 10.0 (-10.0) :: Vertex2 GLfloat)
+        vertex (Vertex2 10.0 10.0 :: Vertex2 GLfloat)
+        vertex (Vertex2 (-10.0) 10.0 :: Vertex2 GLfloat)
+    
+    -- This part is needed to both handle if the Outside is in root or in an IntersectGS
+    -- save the current StencilBuffer
+    stencilBufferFromOutside <- liftIO $ readStencilBuffer (x, y) (width, height)
+    -- now intersect it with the previous
+    intersectionStencilBuffer <- liftIO $ computeIntersection (width, height) prevStencilBuffer stencilBufferFromOutside
+    -- and now set it as the current StencilBuffer
+    liftIO $ do
+      clear [StencilBuffer]
+      writeStencilBuffer (x, y) (width, height) intersectionStencilBuffer
+    -- Now draw everywhere based on this
+    colorMask $= Color4 Enabled Enabled Enabled Enabled
+    liftIO $ do
+      stencilFunc $= (Equal, 1, 0xFF)
+      stencilOp $= (OpKeep, OpKeep, OpKeep)
+      renderPrimitive Quads $ do
+        vertex (Vertex2 (-10.0) (-10.0) :: Vertex2 GLfloat)
+        vertex (Vertex2 10.0 (-10.0) :: Vertex2 GLfloat)
+        vertex (Vertex2 10.0 10.0 :: Vertex2 GLfloat)
+        vertex (Vertex2 (-10.0) 10.0 :: Vertex2 GLfloat)
+    
+    -- restore previous StencilBuffer
+    liftIO $ writeStencilBuffer (x, y) (width, height) prevStencilBuffer
+
+  -- Restore the stencil test state
+  colorMask $= prevColorMask
+  liftIO $ do
+    stencilTest $= prevStencilTestStatus
+    stencilFunc $= prevStencilFunc
+    stencilOp $= prevStencilOp
   
 -- Helper function to read the stencil buffer
 readStencilBuffer :: (GLint, GLint) -> (GLsizei, GLsizei) -> IO (StorableArray (GLint, GLint) CUInt)
