@@ -14,11 +14,11 @@ foldRegion alg (OutsideGS r)      = ra_outside alg (foldRegion alg r)
 foldRegion alg (IntersectionGS r1 r2) = ra_intersection alg (foldRegion alg r1) (foldRegion alg r2)
 foldRegion alg (UnionGS r1 r2) = ra_union alg (foldRegion alg r1) (foldRegion alg r2)
 
+
 distanceFromCenterConeYAxis :: Double -> Double -> (Double -> Double)
 distanceFromCenterConeYAxis base height =
   let slope = height/base
     in \y -> slope * y + base
-
 
 
 -- inRegion interpretation
@@ -35,18 +35,6 @@ inRegionAlgebra = RAlg {
   ra_union = \r1 r2 p -> r1 p || r2 p
 }
 
--- renderRegion interpretation
-renderAlgebra :: RegionAlgebra (Draw())
-renderAlgebra = RAlg {
-  ra_sphere = drawSphere,
-  ra_cube = drawCube,
-  ra_cone = drawCone,
-  ra_translate = drawTranslate,
-  ra_rotate = drawRotate,
-  ra_outside = drawOutside,
-  ra_intersection = drawIntersection,
-  ra_union = drawUnion
-}
 
 -- serialize interpretation
 serializeAlgebra :: RegionAlgebra String
@@ -62,13 +50,18 @@ serializeAlgebra = RAlg {
 }
 
 
--- display logic
-displayRegion :: Region -> IO ()
-displayRegion region = do
-  (_progName, _args) <- getArgsAndInitialize
-  _window <- createWindow "GeoServer"
-  displayCallback $= drawing region
-  mainLoop
+-- renderRegion interpretation
+renderAlgebra :: RegionAlgebra (Draw())
+renderAlgebra = RAlg {
+  ra_sphere = drawSphere,
+  ra_cube = drawCube,
+  ra_cone = drawCone,
+  ra_translate = drawTranslate,
+  ra_rotate = drawRotate,
+  ra_outside = drawOutside,
+  ra_intersection = drawIntersection,
+  ra_union = drawUnion
+}
 
 drawing :: Region -> DisplayCallback
 drawing region = do
@@ -80,15 +73,18 @@ drawing region = do
     colorMask $= Color4 Disabled Disabled Disabled Disabled
     stencilFunc $= (Always, 1, 0xFF)
     stencilOp $= (OpReplace, OpReplace, OpReplace)
-    renderPrimitive Quads $ do
-      color (Color3 1.0 0.0 0.0 :: Color3 GLfloat)
-      vertex (Vertex2 (-1.0) (-1.0) :: Vertex2 GLfloat)
-      vertex (Vertex2 1.0 (-1.0) :: Vertex2 GLfloat)
-      vertex (Vertex2 1.0 1.0 :: Vertex2 GLfloat)
-      vertex (Vertex2 (-1.0) 1.0 :: Vertex2 GLfloat)
+    drawOverWholeStencilBuffer
     colorMask $= Color4 Enabled Enabled Enabled Enabled
     stencilTest $= Enabled
     -- until here 
-
     runDraw (DrawState (Color3 1 0 0) (Color3 0.8 0 0)) (foldRegion renderAlgebra region)
     flush
+
+
+-- display logic
+displayRegion :: Region -> IO ()
+displayRegion region = do
+  (_progName, _args) <- getArgsAndInitialize
+  _window <- createWindow "GeoServer"
+  displayCallback $= drawing region
+  mainLoop

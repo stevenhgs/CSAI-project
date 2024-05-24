@@ -15,6 +15,16 @@ data DrawState = DrawState {
 
 type Draw a = StateT DrawState IO a
 
+
+drawOverWholeStencilBuffer :: DisplayCallback
+drawOverWholeStencilBuffer =
+      renderPrimitive Quads $ do
+        vertex (Vertex2 (-10.0) (-10.0) :: Vertex2 GLfloat)
+        vertex (Vertex2 10.0 (-10.0) :: Vertex2 GLfloat)
+        vertex (Vertex2 10.0 10.0 :: Vertex2 GLfloat)
+        vertex (Vertex2 (-10.0) 10.0 :: Vertex2 GLfloat)
+
+
 drawWithOutline :: DisplayCallback -> Draw()
 drawWithOutline renderObject = do
   state <- Control.Monad.State.get
@@ -30,23 +40,22 @@ drawWithOutline renderObject = do
     -- Reset the polygon mode to fill
     polygonMode $= (Fill, Fill)
 
-scaleColor3 :: GLdouble -> Color3 GLdouble -> Color3 GLdouble
-scaleColor3 factor (Color3 r g b) = 
-    Color3 (clamp(r*factor)) (clamp(g*factor)) (clamp(b*factor))
-  where
-    clamp x = max 0 (min 1 x)
-  
+
 drawCone :: GLdouble -> GLdouble -> Draw()
 drawCone base height = drawWithOutline $ renderObject Solid (Cone base height 40 40)
+
 
 drawSphere :: GLdouble -> Draw()
 drawSphere radius =  drawWithOutline $ renderObject Solid (Sphere' radius 40 40)
 
+
 drawCube :: GLdouble -> Draw()
 drawCube side = drawWithOutline $ renderObject Solid (Cube side)
 
+
 runDraw :: DrawState -> Draw a -> IO a
 runDraw initialState drawAction = evalStateT drawAction initialState
+
 
 drawTranslate :: Draw() -> PointGS -> Draw()
 drawTranslate drawAction (x, y, z) = do
@@ -54,6 +63,7 @@ drawTranslate drawAction (x, y, z) = do
   liftIO $ preservingMatrix $ do
     translate $ Vector3 x y z
     evalStateT drawAction currentState
+
 
 drawRotate :: Draw() -> PointGS -> Draw()
 drawRotate drawAction (angleX, angleY, angleZ) = do
@@ -63,6 +73,7 @@ drawRotate drawAction (angleX, angleY, angleZ) = do
     rotate angleY $ Vector3 0 1 0
     rotate angleZ $ Vector3 0 0 1
     evalStateT drawAction currentState
+
 
 drawOutside :: Draw() -> Draw()
 drawOutside drawAction = do
@@ -93,17 +104,13 @@ drawOutside drawAction = do
       -- so if it is equal to 1 than it needs to be 0 -> Decr
       -- if it is not equal to 1 make it 1 -> Incr
       stencilOp $= (OpIncr, OpDecr, OpDecr)
-      renderPrimitive Quads $ do
-        vertex (Vertex2 (-10.0) (-10.0) :: Vertex2 GLfloat)
-        vertex (Vertex2 10.0 (-10.0) :: Vertex2 GLfloat)
-        vertex (Vertex2 10.0 10.0 :: Vertex2 GLfloat)
-        vertex (Vertex2 (-10.0) 10.0 :: Vertex2 GLfloat)
+      drawOverWholeStencilBuffer
 
   -- if color mask is not disabled we need to draw
   unless isColorMaskDisabled $ do
-    colorMask $= Color4 Disabled Disabled Disabled Disabled
-    liftIO $ clear [StencilBuffer]
     liftIO $ do
+      clear [StencilBuffer]
+      colorMask $= Color4 Disabled Disabled Disabled Disabled
       stencilOp $= (OpReplace, OpReplace, OpReplace)
       stencilFunc $= (Always, 1, 0xFF)
     drawAction
@@ -115,11 +122,7 @@ drawOutside drawAction = do
       -- so if it is equal to 1 than it needs to be 0 -> Decr
       -- if it is not equal to 1 make it 1 -> Incr
       stencilOp $= (OpIncr, OpDecr, OpDecr)
-      renderPrimitive Quads $ do
-        vertex (Vertex2 (-10.0) (-10.0) :: Vertex2 GLfloat)
-        vertex (Vertex2 10.0 (-10.0) :: Vertex2 GLfloat)
-        vertex (Vertex2 10.0 10.0 :: Vertex2 GLfloat)
-        vertex (Vertex2 (-10.0) 10.0 :: Vertex2 GLfloat)
+      drawOverWholeStencilBuffer
     
     -- This part is needed to both handle if the Outside is in root or in an IntersectGS
     -- save the current StencilBuffer
@@ -135,11 +138,7 @@ drawOutside drawAction = do
     liftIO $ do
       stencilFunc $= (Equal, 1, 0xFF)
       stencilOp $= (OpKeep, OpKeep, OpKeep)
-      renderPrimitive Quads $ do
-        vertex (Vertex2 (-10.0) (-10.0) :: Vertex2 GLfloat)
-        vertex (Vertex2 10.0 (-10.0) :: Vertex2 GLfloat)
-        vertex (Vertex2 10.0 10.0 :: Vertex2 GLfloat)
-        vertex (Vertex2 (-10.0) 10.0 :: Vertex2 GLfloat)
+      drawOverWholeStencilBuffer
     
     -- restore previous StencilBuffer
     liftIO $ writeStencilBuffer (x, y) (width, height) prevStencilBuffer
@@ -150,6 +149,7 @@ drawOutside drawAction = do
     stencilTest $= prevStencilTestStatus
     stencilFunc $= prevStencilFunc
     stencilOp $= prevStencilOp
+
 
 -- Main function to draw the intersection
 drawIntersection :: Draw() -> Draw() -> Draw()
@@ -222,6 +222,7 @@ drawIntersection drawAction1 drawAction2 = do
     stencilFunc $= prevStencilFunc
     stencilOp $= prevStencilOp
 
+
 drawUnion :: Draw() -> Draw() -> Draw()
 drawUnion drawAction1 drawAction2 = do
     prevColorMask <- liftIO $ Graphics.UI.GLUT.get colorMask
@@ -271,41 +272,3 @@ drawUnion drawAction1 drawAction2 = do
     unless isColorMaskDisabled $ do
       drawAction1
       drawAction2
-
-
--- FOR TESTING
-display :: DisplayCallback
-display = do
-  clear [ ColorBuffer, DepthBuffer, StencilBuffer]
-  stencilTest $= Enabled
-  clear [StencilBuffer]
-  colorMask $= Color4 Disabled Disabled Disabled Disabled
-  stencilFunc $= (Always, 1, 0xFF)
-  stencilOp $= (OpReplace, OpReplace, OpReplace)
-  renderPrimitive Quads $ do
-    color (Color3 1.0 0.0 0.0 :: Color3 GLfloat)
-    vertex (Vertex2 (-1.0) (-1.0) :: Vertex2 GLfloat)
-    vertex (Vertex2 1.0 (-1.0) :: Vertex2 GLfloat)
-    vertex (Vertex2 1.0 1.0 :: Vertex2 GLfloat)
-    vertex (Vertex2 (-1.0) 1.0 :: Vertex2 GLfloat)
-  colorMask $= Color4 Enabled Enabled Enabled Enabled
-  runDraw (DrawState (Color3 0 1 0) (Color3 0 0.8 0)) (drawUnion (drawRotate (drawCube 0.5) (45, 45, 0)) (drawTranslate (drawSphere 0.2) (-0.5, 0, 0)))
-  stencilTest $= Enabled
-  flush
-
-reshape :: ReshapeCallback
-reshape size = do 
-  viewport $= (Position 0 0, size)
-
-keyboardMouse :: KeyboardMouseCallback
-keyboardMouse _key _state _modifiers _position = return ()
-
-
-main :: IO()
-main = do
-  (_progName, _args) <- getArgsAndInitialize
-  initialDisplayMode $= [RGBAMode, WithStencilBuffer]
-  _window <- createWindow "GeoServer"
-  clearColor $= Color4 0.0 0.0 0.0 1.0
-  displayCallback $= display
-  mainLoop
