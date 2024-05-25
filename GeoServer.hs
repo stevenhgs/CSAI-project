@@ -84,13 +84,39 @@ renderAlgebra = RAlg {
   ra_union = drawUnion
 }
 
+
+drawing :: Region -> DisplayCallback
+drawing region = do
+    clear [ ColorBuffer, DepthBuffer, StencilBuffer]
+    -- This is needed for intersections
+    stencilTest $= Enabled
+    clear [StencilBuffer]
+    colorMask $= Color4 Disabled Disabled Disabled Disabled
+    stencilFunc $= (Always, 1, 0xFF)
+    stencilOp $= (OpReplace, OpReplace, OpReplace)
+    drawOverWholeStencilBuffer
+    colorMask $= Color4 Enabled Enabled Enabled Enabled
+    stencilTest $= Enabled
+    -- until here 
+    runDraw (DrawState (Color3 1 0 0) (Color3 0.8 0 0)) (foldRegion renderAlgebra region)
+    flush
+
+
+displayRegion :: Region -> IO ()
+displayRegion region = do
+  (_progName, _args) <- getArgsAndInitialize
+  _window <- createWindow "GeoServer"
+  displayCallback $= drawing region
+  mainLoop
+
+
 setColor :: GLdouble -> GLdouble -> GLdouble -> DrawState
 setColor r g b = DrawState (Color3 r g b) (scaleColor3 0.8 (Color3 r g b))
 
-drawing :: [(DrawState, Region)] -> DisplayCallback
-drawing regions = do
-    clear [ ColorBuffer, DepthBuffer, StencilBuffer]
 
+drawingWithCustomColors :: [(DrawState, Region)] -> DisplayCallback
+drawingWithCustomColors regions = do
+    clear [ ColorBuffer, DepthBuffer, StencilBuffer]
     -- This is needed for intersections
     stencilTest $= Enabled
     clear [StencilBuffer]
@@ -107,10 +133,9 @@ drawing regions = do
     flush
 
 
--- display logic
-displayRegions :: [(DrawState, Region)] -> IO ()
-displayRegions regions = do
+displayRegionsWithCustomColors :: [(DrawState, Region)] -> IO ()
+displayRegionsWithCustomColors regions = do
   (_progName, _args) <- getArgsAndInitialize
   _window <- createWindow "GeoServer"
-  displayCallback $= drawing regions
+  displayCallback $= drawingWithCustomColors regions
   mainLoop
