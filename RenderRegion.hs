@@ -24,6 +24,11 @@ drawOverWholeStencilBuffer =
         vertex (Vertex2 10.0 10.0 :: Vertex2 GLfloat)
         vertex (Vertex2 (-10.0) 10.0 :: Vertex2 GLfloat)
 
+scaleColor3 :: GLdouble -> Color3 GLdouble -> Color3 GLdouble
+scaleColor3 factor (Color3 r g b) = 
+    Color3 (clamp(r*factor)) (clamp(g*factor)) (clamp(b*factor))
+  where
+    clamp x = max 0 (min 1 x)
 
 drawWithOutline :: DisplayCallback -> Draw()
 drawWithOutline renderObject = do

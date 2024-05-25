@@ -84,8 +84,11 @@ renderAlgebra = RAlg {
   ra_union = drawUnion
 }
 
-drawing :: Region -> DisplayCallback
-drawing region = do
+setColor :: GLdouble -> GLdouble -> GLdouble -> DrawState
+setColor r g b = DrawState (Color3 r g b) (scaleColor3 0.8 (Color3 r g b))
+
+drawing :: [(DrawState, Region)] -> DisplayCallback
+drawing regions = do
     clear [ ColorBuffer, DepthBuffer, StencilBuffer]
 
     -- This is needed for intersections
@@ -97,15 +100,17 @@ drawing region = do
     drawOverWholeStencilBuffer
     colorMask $= Color4 Enabled Enabled Enabled Enabled
     stencilTest $= Enabled
-    -- until here 
-    runDraw (DrawState (Color3 1 0 0) (Color3 0.8 0 0)) (foldRegion renderAlgebra region)
+    -- until here
+    mapM_ (\(drawState, region) -> do
+      runDraw drawState (foldRegion renderAlgebra region)
+      ) regions
     flush
 
 
 -- display logic
-displayRegion :: Region -> IO ()
-displayRegion region = do
+displayRegions :: [(DrawState, Region)] -> IO ()
+displayRegions regions = do
   (_progName, _args) <- getArgsAndInitialize
   _window <- createWindow "GeoServer"
-  displayCallback $= drawing region
+  displayCallback $= drawing regions
   mainLoop
