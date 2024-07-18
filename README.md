@@ -1,1 +1,3 @@
-# CSAI-3D-GeoServer
+# Capita Selecta: Artificial Intelligence Project
+
+This is the repository of the project for the KULeuven course [Capita Selecta Computer Science: Artificial Intelligence (B-KUL-H05N0A)](https://onderwijsaanbod.kuleuven.be/2023/syllabi/e/H05N0AE.htm#activetab=doelstellingen_idp947952), Language Engineering in Haskell. This project is an extension of the project described in the paper [Haskell, Ada, C++, Awk: An Experiment in Prototyping Productivity](http://www.cvc.yale.edu/publications/techreports/tr1049.pdf). More information about this project can be found in the [report.pdf](https://github.com/stevenhgs/CSAI-project/blob/main/report.pdf).
